@@ -137,9 +137,36 @@ class UiTests(unittest.TestCase):
 
     def tearDown(self):
         with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.No):
-            self.w.close()
+            self.w.request_quit()
         self.app.processEvents()
         self.tmp.cleanup()
+
+    def test_close_keeps_session_and_database_alive(self):
+        self.w.clock.toggle()
+        self.w.close()
+        self.app.processEvents()
+        self.assertFalse(self.w.isVisible())
+        self.assertTrue(self.w.clock.running)
+        self.w.store.add_task('Still here')
+        self.w.open_dashboard()
+        self.assertTrue(self.w.isVisible())
+
+    def test_dashboard_hides_real_goose_and_desktop_restores_it(self):
+        self.w.show_goose()
+        self.assertFalse(self.w.goose.isVisible())
+        self.w.demo = False
+        self.w.close()
+        self.assertTrue(self.w.goose.isVisible())
+        self.w.open_dashboard()
+        self.assertFalse(self.w.goose.isVisible())
+
+    def test_cancel_quit_keeps_everything_alive(self):
+        self.w.clock.remaining -= 20
+        with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Cancel):
+            self.assertFalse(self.w.request_quit())
+        self.assertFalse(self.w._closed)
+        self.assertTrue(self.w.timer.isActive())
+        self.w.store.add_task('Still alive')
 
     def test_all_pages_render(self):
         for index in range(4):
