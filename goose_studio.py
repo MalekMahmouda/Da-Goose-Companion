@@ -177,6 +177,9 @@ QProgressBar::chunk {background:#84a85b; border-radius:5px;}
 
 
 def label(text, name=None):
+    # Windows paths and other unbroken tokens must be wrappable too.
+    import re
+    text = re.sub(r'(\S{24})(?=\S)', lambda m: m.group(1) + '\u200b', text)
     w = QLabel(text)
     w.setWordWrap(True)
     w.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -569,6 +572,8 @@ class Studio(QMainWindow):
         row = self.adaptive_row()
         row.addWidget(label('Goose wardrobe'))
         self.skin = QComboBox()
+        self.skin.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.skin.setMinimumContentsLength(14)
         for key, skin in SKINS.items():
             self.skin.addItem(''.join(c for c in skin['name'] if c.isascii()).strip(), key)
         self.skin.setCurrentIndex(max(0, self.skin.findData(self.cfg.get('goose_skin', 'classic'))))
