@@ -3,8 +3,9 @@ import os
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
-from PyQt6.QtWidgets import QApplication, QPushButton, QLineEdit, QComboBox, QSpinBox, QLabel, QMessageBox
+from PyQt6.QtWidgets import QApplication, QPushButton, QLineEdit, QComboBox, QSpinBox, QLabel, QMessageBox, QWidget
 from goose_studio import Studio
+from PyQt6.QtTest import QTest
 
 app = QApplication.instance() or QApplication([])
 app.setStyle('Fusion')
@@ -23,8 +24,13 @@ with tempfile.TemporaryDirectory() as data:
             w.navigate(page)
             for _ in range(5):
                 app.processEvents()
+            QTest.qWait(150)  # Let native Windows resize/scrollbar events settle.
             area = w.pages.currentWidget()
             content = area.widget()
+            if content.width() > area.viewport().width():
+                for item in content.findChildren(QWidget):
+                    if item.minimumSizeHint().width() > 250 or item.minimumWidth() > 250:
+                        print('WIDTH_DIAGNOSTIC', type(item).__name__, getattr(item, 'text', lambda: '')()[:160], item.minimumSizeHint().width(), item.minimumWidth(), item.sizeHint().width(), item.sizePolicy().horizontalPolicy(), flush=True)
             assert content.width() <= area.viewport().width(), (width, page, 'horizontal overflow', content.width(), area.viewport().width())
             for control in content.findChildren((QPushButton, QLineEdit, QComboBox, QSpinBox)):
                 if not control.isVisible():
