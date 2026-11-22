@@ -7,6 +7,7 @@ on:
     paths:
       - "*.py"
       - "requirements.txt"
+      - ".github/workflows/build-windows-exe.yml"
   workflow_dispatch:
 
 permissions:
@@ -90,8 +91,8 @@ jobs:
       - name: Publish exe as a GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: goose-studio-v2
-          name: Da Goose Studio v2 - desktop and DPI fixes (Windows)
+          tag_name: goose-studio-v2.1
+          name: Da Goose Studio v2.1 - desktop and DPI fixes (Windows)
           target_commitish: ${{ github.sha }}
           body: |
             Responsive, scrollable dashboard tested at 100%, 125% and 150% DPI.
@@ -104,6 +105,9 @@ jobs:
           files: |
             dist/DaGooseStudio.exe
             dist/SHA256SUMS.txt
+            ui-verification/page-0-1100x780-scale-1.png
+            ui-verification/page-1-1100x780-scale-1.png
+            ui-verification/page-2-1100x780-scale-1.png
             ui-verification/page-0-960x640-scale-1.5.png
             ui-verification/page-3-960x640-scale-1.5.png
             ui-verification/controls-bottom-600-scale-1.5.png
