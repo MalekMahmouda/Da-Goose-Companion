@@ -4,10 +4,17 @@ on:
   push:
     branches:
       - feature/goose-studio
+    paths:
+      - "*.py"
+      - "requirements.txt"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: goose-studio-windows
+  cancel-in-progress: true
 
 jobs:
   build-windows:
@@ -23,6 +30,28 @@ jobs:
 
       - name: Install build tools and app dependencies
         run: python -m pip install --upgrade pip pyinstaller PyQt6 Pillow requests
+
+      - name: Regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest test_studio -v
+
+      - name: Verify and render Windows layout at 100, 125 and 150 percent DPI
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          foreach ($scale in @("1", "1.25", "1.5")) {
+            $env:QT_SCALE_FACTOR = $scale
+            python verify_ui.py
+            if ($LASTEXITCODE -ne 0) { throw "UI verification failed at $scale" }
+          }
+          Remove-Item Env:QT_SCALE_FACTOR
+
+      - name: Upload actual Windows UI verification screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-DPI-screenshots
+          path: ui-verification/*.png
 
       - name: Build single-file exe with PyInstaller
         run: pyinstaller --noconfirm --clean --onefile --windowed --name DaGooseStudio goose_studio.py
@@ -45,6 +74,12 @@ jobs:
           Stop-Process -Id $proc.Id -Force
           Write-Output "exe stayed running for 20 seconds"
 
+      - name: Hash the verified exe
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/DaGooseStudio.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  DaGooseStudio.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+
       - name: Upload exe as workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -55,11 +90,21 @@ jobs:
       - name: Publish exe as a GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: goose-studio-v1
-          name: Da Goose Studio v1 (Windows)
+          tag_name: goose-studio-v2
+          name: Da Goose Studio v2 - desktop and DPI fixes (Windows)
+          target_commitish: ${{ github.sha }}
           body: |
-            Portable Windows build of Da Goose Studio (feature/goose-studio branch).
-            Download DaGooseStudio.exe and double-click it. No Python or installation needed.
-            The exe is unsigned, so Windows SmartScreen may show a blue warning the first time: click "More info", then "Run anyway".
-          files: dist/DaGooseStudio.exe
+            Responsive, scrollable dashboard tested at 100%, 125% and 150% DPI.
+            Closing the dashboard keeps your goose and focus timer running.
+            Double-click the goose or use the tray icon to reopen. Use Quit to stop.
+            The real goose no longer overlaps the dashboard. Existing local data is preserved.
+            Quit the old version before launching this one. Windows x64, no Python needed.
+            This exe is unsigned. Only run it if you trust this source and release.
+            Includes actual Windows-rendered screenshots and SHA256 checksums.
+          files: |
+            dist/DaGooseStudio.exe
+            dist/SHA256SUMS.txt
+            ui-verification/page-0-960x640-scale-1.5.png
+            ui-verification/page-3-960x640-scale-1.5.png
+            ui-verification/controls-bottom-600-scale-1.5.png
           make_latest: true
