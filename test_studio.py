@@ -108,6 +108,10 @@ class StoreTests(unittest.TestCase):
         self.s.log_session(60, tid)
         self.s.delete(tid)
         self.assertEqual(self.s.week()[-1][1], 60)
+        new_id = self.s.add_task('A different task')
+        self.assertNotEqual(new_id, tid)
+        row = self.s.db.execute('SELECT task_id FROM sessions').fetchone()
+        self.assertIsNone(row['task_id'])
 
     def test_export_is_safe_for_spreadsheets(self):
         tid = self.s.add_task('=2+2', '+project')
