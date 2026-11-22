@@ -1,5 +1,10 @@
 """Render real Qt pages and check layout at the caller's QT_SCALE_FACTOR."""
 import os
+import sys
+if sys.platform == "win32":
+    os.environ["QT_QPA_PLATFORM"] = "windows"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
