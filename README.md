@@ -46,7 +46,7 @@ python goose_studio.py --demo --data-dir ./my-test-profile
 - Link a focus session to an unfinished task.
 - A completed focus session prepares a five-minute break. Breaks start only when you choose.
 - A completed break prepares your next focus session, again without starting it automatically.
-- Save or discard partial focus sessions when resetting or closing. Cancel keeps the timer intact.
+- Save or discard partial focus sessions when resetting or using Quit. Cancel keeps the timer intact.
 - Offline goose pep talks, with no network request.
 
 ### Task pond
@@ -80,7 +80,7 @@ Studio works fully without this feature. To use it, set `GEMINI_API_KEY` in **yo
 
 The Controls page lets you enter a Gemini model ID available to your account. `GEMINI_MODEL` can set the initial model. The supplied default is a configurable identifier, not a promise that your account has access.
 
-Each peek first asks for confirmation. Accepting it captures a JPEG thumbnail of the **entire primary screen** and sends it to **Google Gemini**. Close private documents and messages first. API usage may cost money under your Google account's terms. No screenshot is saved by Studio. Capturing happens on the GUI thread; the network request runs in a background worker. Returned text is displayed as plain text and never executed. Closing waits for an in-flight request to finish.
+Each peek first asks for confirmation. Accepting it captures a JPEG thumbnail of the **entire primary screen** and sends it to **Google Gemini**. Close private documents and messages first. API usage may cost money under your Google account's terms. No screenshot is saved by Studio. Capturing happens on the GUI thread; the network request runs in a background worker. Returned text is displayed as plain text and never executed. Quit waits for an in-flight request to finish; closing the dashboard leaves it running.
 
 The implementation was tested for missing keys, cancelled consent, response parsing and network-error paths with mocked inputs. A real Gemini request has **not** been tested with a user's key or screen.
 
@@ -91,10 +91,10 @@ The implementation was tested for missing keys, cancelled consent, response pars
 - Studio does not store screenshots, active-window titles or API keys in its database.
 - No analytics, account signup, automatic cloud sync or auto-updater is added.
 - Reminders work only while the app is running. The focus timer measures running timer time, not attention or keyboard activity.
-- Unsaved active time can be lost if the app or computer crashes. Normal closing offers to save partial time.
-- Closing the dashboard exits the app and stops the companion. The original tray menu can show/hide the floating goose and open Studio controls.
+- Unsaved active time can be lost if the app or computer crashes. Quit offers to save partial time. Closing the window keeps the timer running.
+- Closing the dashboard keeps the app and companion running. Double-click the goose or use the Studio tray icon to reopen; use Quit to stop both.
 
-Back up the data by closing Studio and copying the configuration folder. Restore that folder while Studio is closed.
+Back up the data by using Quit in Studio and copying the configuration folder. Restore that folder while Studio is fully quit.
 
 ## Tests
 
@@ -120,3 +120,19 @@ Verification was performed with Python 3.10 and PyQt6 on Linux using Qt's offscr
 - `LICENSE`: original MIT license, unchanged.
 
 This is a feature branch on a fork. It does not change the upstream repository, create a pull request or publish an executable release.
+
+
+## Studio v2: scaling and desktop mode
+
+- The dashboard now uses compact top navigation and independently scrollable pages.
+  Small windows switch forms to one column. The desktop goose never covers the dashboard.
+- The X button keeps the app, focus timer and reminders running on the desktop.
+  Double-click the goose, or click the Studio tray icon, to reopen the dashboard.
+  Use **Quit** in the dashboard or tray menu to really stop the app. Quit still offers
+  save/discard/cancel for partial focus time. Nothing starts automatically with Windows.
+- Tasks, preferences and history use the same data folder as v1. Quit v1 before launching v2.
+- Windows builds run 30 regression tests and render all four pages at 600x440, 960x640
+  and 1100x780 logical pixels, each at 100%, 125% and 150% scale. The verification script
+  checks control heights, horizontal overflow and close/reopen/quit behavior.
+  This is automated Qt verification, not a test on every physical monitor configuration.
+- The portable exe remains unsigned. Only run it if you trust this fork and release.
