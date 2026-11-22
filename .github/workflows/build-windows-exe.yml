@@ -1,0 +1,65 @@
+name: Build Windows exe
+
+on:
+  push:
+    branches:
+      - feature/goose-studio
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools and app dependencies
+        run: python -m pip install --upgrade pip pyinstaller PyQt6 Pillow requests
+
+      - name: Build single-file exe with PyInstaller
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name DaGooseStudio goose_studio.py
+
+      - name: Verify the exe exists
+        shell: pwsh
+        run: |
+          $exe = "dist\DaGooseStudio.exe"
+          if (!(Test-Path $exe)) { throw "PyInstaller did not produce $exe" }
+          $size = (Get-Item $exe).Length
+          Write-Output "Built $exe ($size bytes)"
+
+      - name: Smoke test the exe launches and stays alive
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "minimal"
+          $proc = Start-Process -FilePath "dist\DaGooseStudio.exe" -ArgumentList "--demo","--data-dir","$env:TEMP\goose-smoke" -PassThru
+          Start-Sleep -Seconds 20
+          if ($proc.HasExited) { throw "exe exited within 20 seconds (exit code $($proc.ExitCode))" }
+          Stop-Process -Id $proc.Id -Force
+          Write-Output "exe stayed running for 20 seconds"
+
+      - name: Upload exe as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DaGooseStudio-windows-exe
+          path: dist/DaGooseStudio.exe
+          retention-days: 30
+
+      - name: Publish exe as a GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: goose-studio-v1
+          name: Da Goose Studio v1 (Windows)
+          body: |
+            Portable Windows build of Da Goose Studio (feature/goose-studio branch).
+            Download DaGooseStudio.exe and double-click it. No Python or installation needed.
+            The exe is unsigned, so Windows SmartScreen may show a blue warning the first time: click "More info", then "Run anyway".
+          files: dist/DaGooseStudio.exe
+          make_latest: true
