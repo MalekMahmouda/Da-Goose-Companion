@@ -179,7 +179,7 @@ QProgressBar::chunk {background:#84a85b; border-radius:5px;}
 def label(text, name=None):
     w = QLabel(text)
     w.setWordWrap(True)
-    w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+    w.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
     if name:
         w.setObjectName(name)
     return w
