@@ -147,7 +147,7 @@ from goose_window import GooseWindow, create_tray_icon
 from ai_worker import capture_desktop_thumbnail
 
 STYLE = '''
-QWidget {font-family: 'Segoe UI', 'DejaVu Sans'; font-size:14px; color:#27362f;}
+QWidget {font-size:14px; color:#27362f;}
 QMainWindow, QDialog, QScrollArea, QScrollArea > QWidget > QWidget {background:#f4f5ef;}
 QScrollBar:vertical {background:#e7ece3; width:12px; border-radius:6px;}
 QScrollBar::handle:vertical {background:#9bad9b; border-radius:6px; min-height:30px;}
@@ -336,6 +336,7 @@ class Studio(QMainWindow):
         self.setWindowIcon(create_tray_icon())
         self.resize(1040, 760)
         self.setMinimumSize(600, 440)
+        self.setFont(QFont('Segoe UI' if sys.platform == 'win32' else 'DejaVu Sans', 10))
         self.setStyleSheet(STYLE)
         self._quitting = False
         self._closed = False
@@ -347,6 +348,8 @@ class Studio(QMainWindow):
         layout.setSpacing(12)
         header = QHBoxLayout()
         header.addWidget(label('DA GOOSE STUDIO', 'brand'))
+        header.itemAt(0).widget().setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        header.itemAt(0).widget().setWordWrap(False)
         header.itemAt(0).widget().setStyleSheet('color:#193e34; font-size:22px; font-weight:700;')
         header.addStretch()
         header.addWidget(button('To desktop', self.send_to_desktop))
