@@ -26,7 +26,7 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS tasks (
-          id INTEGER PRIMARY KEY, title TEXT NOT NULL, project TEXT NOT NULL,
+          id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, project TEXT NOT NULL,
           priority TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS sessions (
           id INTEGER PRIMARY KEY, ended TEXT NOT NULL, seconds INTEGER NOT NULL,
@@ -66,6 +66,7 @@ class Store:
 
     def delete(self, task_id):
         with self.db:
+            self.db.execute('UPDATE sessions SET task_id=NULL WHERE task_id=?', (task_id,))
             self.db.execute('DELETE FROM tasks WHERE id=?', (task_id,))
 
     def log_session(self, seconds, task_id=None, completed=True, ended=None):
@@ -489,6 +490,7 @@ class Studio(QMainWindow):
         v.addLayout(row)
         self.goal_bar = QProgressBar()
         self.goal_bar.setRange(0, 100)
+        self.goal_bar.setTextVisible(False)
         v.addWidget(self.goal_bar)
         v.addWidget(label('Closing Studio asks whether to save partial focus time. Breaks never count as work.', 'muted'))
         v.addStretch()
