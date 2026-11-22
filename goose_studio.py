@@ -140,30 +140,33 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog,
     QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QSpinBox, QStackedWidget,
-    QSystemTrayIcon, QTextEdit, QVBoxLayout, QWidget)
+    QSystemTrayIcon, QTextEdit, QVBoxLayout, QWidget, QScrollArea, QSizePolicy, QLayout, QBoxLayout, QMenu)
 from config_manager import ConfigManager
 from goose_painter import GoosePainter, SKINS
 from goose_window import GooseWindow, create_tray_icon
 from ai_worker import capture_desktop_thumbnail
 
 STYLE = '''
-QWidget {font-family: 'DejaVu Sans', 'Segoe UI'; font-size:14px; color:#27362f;}
-QMainWindow, QDialog {background:#f4f5ef;}
+QWidget {font-family: 'Segoe UI', 'DejaVu Sans'; font-size:14px; color:#27362f;}
+QMainWindow, QDialog, QScrollArea, QScrollArea > QWidget > QWidget {background:#f4f5ef;}
+QScrollBar:vertical {background:#e7ece3; width:12px; border-radius:6px;}
+QScrollBar::handle:vertical {background:#9bad9b; border-radius:6px; min-height:30px;}
 QFrame#sidebar {background:#183e35; border-radius:18px;}
 QFrame#sidebar QLabel {color:#dce8dc;}
 QLabel#brand {font-size:24px; font-weight:700; color:#e5f9a4;}
 QLabel#eyebrow {color:#658275; font-size:11px; font-weight:700;}
 QLabel#title {font-size:32px; font-weight:700; color:#193e34;}
-QLabel#clock {font-size:74px; font-weight:700; color:#193e34;}
+QLabel#clock {font-size:68px; font-weight:700; color:#193e34;}
 QLabel#muted {color:#69786e; font-size:12px;}
 QFrame#card {background:white; border:1px solid #dfe6dc; border-radius:18px;}
-QPushButton {background:#e7ece3; border:0; padding:12px 17px; border-radius:9px; font-weight:600;}
+QPushButton {background:#e7ece3; border:0; padding:10px 14px; min-height:22px; border-radius:9px; font-weight:600;}
 QPushButton:hover {background:#d8e5d6;}
 QPushButton:disabled {color:#9baba2; background:#eff2ed;}
 QPushButton#primary {background:#d8ee86; color:#213e2d;}
-QPushButton#nav {background:transparent; color:#dce8dc; text-align:left; padding:14px;}
+QPushButton#nav {background:transparent; color:#dce8dc; text-align:left; padding:12px;}
 QPushButton#nav:checked {background:#31584b; color:#e5f9a4;}
-QLineEdit,QSpinBox,QComboBox,QTextEdit {background:white; border:1px solid #d8e0d5; border-radius:8px; padding:9px;}
+QLineEdit,QSpinBox,QComboBox,QTextEdit {background:white; border:1px solid #d8e0d5; border-radius:8px; padding:8px; min-height:24px;}
+QSpinBox QLineEdit {padding:0; border:0; min-height:0; background:transparent;}
 QListWidget {background:white; border:1px solid #dfe6dc; border-radius:12px; padding:8px;}
 QListWidget::item {padding:13px; border-bottom:1px solid #edf0e9;}
 QListWidget::item:selected {background:#edf5d9; color:#193e34; border-radius:8px;}
@@ -176,6 +179,7 @@ QProgressBar::chunk {background:#84a85b; border-radius:5px;}
 def label(text, name=None):
     w = QLabel(text)
     w.setWordWrap(True)
+    w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
     if name:
         w.setObjectName(name)
     return w
@@ -195,6 +199,7 @@ class GoosePreview(QWidget):
         self.engine = GoosePainter('classic')
         self.setMinimumSize(220, 205)
         self.setMaximumHeight(250)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
         self.timer.start(40)
@@ -277,17 +282,25 @@ class StudioGoose(GooseWindow):
 
     def trigger_ai_peek(self):
         if hasattr(self, 'studio'):
-            self.studio.show()
-            self.studio.raise_()
+            self.studio.open_dashboard()
             self.studio.peek()
 
     def _settings(self):
         if hasattr(self, 'studio'):
-            self.studio.show()
+            self.studio.open_dashboard()
             self.studio.navigate(3)
 
+    def _greet(self):
+        if self.isVisible():
+            super()._greet()
+
+    def mouseDoubleClickEvent(self, event):
+        if hasattr(self, 'studio'):
+            self.studio.open_dashboard()
+            event.accept()
+
     def _idle_chatter(self):
-        if getattr(self, 'quiet', False):
+        if getattr(self, 'quiet', False) or not self.isVisible():
             return
         super()._idle_chatter()
 
@@ -301,7 +314,7 @@ class StudioGoose(GooseWindow):
 
     def _exit(self):
         if hasattr(self, 'studio'):
-            self.studio.close()
+            self.studio.request_quit()
         else:
             super()._exit()
 
@@ -318,31 +331,36 @@ class Studio(QMainWindow):
         self.goose = None
         self.setWindowTitle('Da Goose Studio | Focus, with feathers')
         self.setWindowIcon(create_tray_icon())
-        self.resize(1100, 780)
-        self.setMinimumSize(960, 720)
+        self.resize(1040, 760)
+        self.setMinimumSize(600, 440)
         self.setStyleSheet(STYLE)
+        self._quitting = False
+        self._closed = False
+        self.responsive_rows = []
         root = QWidget()
         self.setCentralWidget(root)
-        layout = QHBoxLayout(root)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(26)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(22, 16, 22, 12)
+        layout.setSpacing(12)
+        header = QHBoxLayout()
+        header.addWidget(label('DA GOOSE STUDIO', 'brand'))
+        header.itemAt(0).widget().setStyleSheet('color:#193e34; font-size:22px; font-weight:700;')
+        header.addStretch()
+        header.addWidget(button('To desktop', self.send_to_desktop))
+        header.addWidget(button('Quit', self.request_quit))
+        layout.addLayout(header)
         side = QFrame()
         side.setObjectName('sidebar')
-        side.setFixedWidth(225)
-        sl = QVBoxLayout(side)
-        sl.setContentsMargins(22, 28, 22, 24)
-        sl.addWidget(label('DA GOOSE\nSTUDIO', 'brand'))
-        sl.addWidget(label('A little chaos.\nA lot more focus.'))
-        sl.addSpacing(26)
+        sl = QHBoxLayout(side)
+        sl.setContentsMargins(8, 5, 8, 5)
+        sl.setSpacing(5)
         self.nav = []
-        for i, text in enumerate(['01   Focus nest', '02   Task pond', '03   Your rhythm', '04   Controls']):
+        for i, text in enumerate(['Focus', 'Tasks', 'Rhythm', 'Controls']):
             b = button(text, lambda _, n=i: self.navigate(n))
             b.setObjectName('nav')
             b.setCheckable(True)
-            sl.addWidget(b)
+            sl.addWidget(b, 1)
             self.nav.append(b)
-        sl.addStretch()
-        sl.addWidget(label('LOCAL FIRST\nYour tasks stay on this device.'))
         self.pages = QStackedWidget()
         layout.addWidget(side)
         layout.addWidget(self.pages, 1)
@@ -350,9 +368,12 @@ class Studio(QMainWindow):
         self.build_tasks()
         self.build_stats()
         self.build_controls()
+        for control in self.findChildren((QLineEdit, QComboBox, QSpinBox)):
+            control.setMinimumHeight(max(46, control.minimumSizeHint().height()))
         self.navigate(0)
         self.refresh_tasks()
         self.refresh_stats()
+        self.setup_tray()
         self.last_water = time.monotonic()
         self.last_stretch = time.monotonic()
         self.timer = QTimer(self)
@@ -363,15 +384,57 @@ class Studio(QMainWindow):
         QShortcut(QKeySequence('Ctrl+N'), self, activated=self.new_task_shortcut)
         QShortcut(QKeySequence('Ctrl+Space'), self, activated=self.toggle_focus)
 
+    def setup_tray(self):
+        self.tray = QSystemTrayIcon(self.windowIcon(), self)
+        self.tray.setToolTip('Da Goose Studio - double-click the goose to reopen')
+        menu = QMenu(self)
+        menu.addAction('Open Studio').triggered.connect(self.open_dashboard)
+        menu.addAction('Goose on desktop').triggered.connect(self.send_to_desktop)
+        menu.addSeparator()
+        menu.addAction('Start / pause focus').triggered.connect(self.toggle_focus)
+        menu.addAction('Quit Da Goose Studio').triggered.connect(self.request_quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(lambda reason: self.open_dashboard()
+            if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                          QSystemTrayIcon.ActivationReason.DoubleClick) else None)
+        self.tray.show()
+
+    def adaptive_row(self):
+        row = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        row.setSpacing(10)
+        row.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.responsive_rows.append(row)
+        return row
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = self.width() < 820
+        for row in getattr(self, 'responsive_rows', []):
+            row.setDirection(QBoxLayout.Direction.TopToBottom if compact
+                             else QBoxLayout.Direction.LeftToRight)
+            for i in range(row.count()):
+                if row.itemAt(i).widget():
+                    row.setStretch(i, 0 if compact else 1)
+        if hasattr(self, 'preview'):
+            self.preview.setVisible(not compact)
+
     def page(self, eyebrow, title, subtitle):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 6, 0, 4)
+        layout.setContentsMargins(2, 6, 14, 16)
         layout.setSpacing(14)
+        # A page keeps its natural minimum height. The viewport scrolls instead
+        # of squeezing fonts, native Windows fields, and buttons to zero height.
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.addWidget(label(eyebrow, 'eyebrow'))
         layout.addWidget(label(title, 'title'))
         layout.addWidget(label(subtitle, 'muted'))
-        self.pages.addWidget(page)
+        scroll = QScrollArea()
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        self.pages.addWidget(scroll)
         return layout
 
     def build_focus(self):
@@ -385,15 +448,19 @@ class Studio(QMainWindow):
         self.phase = label('READY WHEN YOU ARE', 'eyebrow')
         left.addWidget(self.phase)
         self.time_label = label('25:00', 'clock')
+        self.time_label.setWordWrap(False)
+        self.time_label.setMinimumHeight(100)
         left.addWidget(self.time_label)
         self.focus_task = QComboBox()
+        self.focus_task.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.focus_task.setMinimumContentsLength(16)
         left.addWidget(self.focus_task)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
         left.addWidget(self.progress)
-        controls = QHBoxLayout()
+        controls = self.adaptive_row()
         self.start_btn = button('Start focus', self.toggle_focus, True)
         controls.addWidget(self.start_btn)
         controls.addWidget(button('Finish / reset', self.reset_focus))
@@ -402,11 +469,11 @@ class Studio(QMainWindow):
         self.preview = GoosePreview()
         row.addWidget(self.preview, 2)
         v.addWidget(card)
-        modes = QHBoxLayout()
+        modes = self.adaptive_row()
         for text, minutes in [('Quick sprint · 15m', 15), ('Classic · 25m', 25), ('Deep work · 50m', 50)]:
             modes.addWidget(button(text, lambda _, m=minutes: self.set_duration(m)))
         v.addLayout(modes)
-        custom = QHBoxLayout()
+        custom = self.adaptive_row()
         self.minutes = QSpinBox()
         self.minutes.setRange(1, 180)
         self.minutes.setValue(self.store.pref('focus_minutes', 25))
@@ -419,9 +486,9 @@ class Studio(QMainWindow):
         self.coach_text = label('HONK OF WISDOM\nMake the first step so small you cannot talk yourself out of it.')
         self.coach_text.setStyleSheet('background:#e8efdc; padding:20px; border-radius:12px;')
         v.addWidget(self.coach_text)
-        bottom = QHBoxLayout()
+        bottom = self.adaptive_row()
         bottom.addWidget(button('Another local pep talk', self.local_coach))
-        bottom.addWidget(button('Show desktop goose', self.show_goose))
+        bottom.addWidget(button('Hang out on desktop', self.send_to_desktop))
         bottom.addStretch()
         v.addLayout(bottom)
         self.today_label = label('', 'muted')
@@ -432,13 +499,13 @@ class Studio(QMainWindow):
 
     def build_tasks(self):
         v = self.page('LESS IN YOUR HEAD', 'The task pond.', 'Small steps become finished things. Ctrl+N adds a task.')
-        fields = QHBoxLayout()
+        fields = self.adaptive_row()
         self.task_title = QLineEdit()
         self.task_title.setPlaceholderText('What is the next small step?')
         self.task_title.returnPressed.connect(self.add_task)
         self.project = QLineEdit()
         self.project.setPlaceholderText('Project')
-        self.project.setMaximumWidth(150)
+        self.project.setMinimumWidth(90)
         self.priority = QComboBox()
         self.priority.addItems(['Normal', 'High', 'Low'])
         fields.addWidget(self.task_title, 3)
@@ -446,7 +513,7 @@ class Studio(QMainWindow):
         fields.addWidget(self.priority)
         fields.addWidget(button('Add task', self.add_task, True))
         v.addLayout(fields)
-        filters = QHBoxLayout()
+        filters = self.adaptive_row()
         self.search = QLineEdit()
         self.search.setPlaceholderText('Search tasks or projects…')
         self.search.textChanged.connect(self.refresh_tasks)
@@ -456,9 +523,11 @@ class Studio(QMainWindow):
         filters.addWidget(self.show_done)
         v.addLayout(filters)
         self.task_list = QListWidget()
+        self.task_list.setMinimumHeight(230)
+        self.task_list.setWordWrap(True)
         self.task_list.itemDoubleClicked.connect(self.toggle_task)
         v.addWidget(self.task_list, 1)
-        actions = QHBoxLayout()
+        actions = self.adaptive_row()
         actions.addWidget(button('Complete / reopen', self.toggle_task, True))
         actions.addWidget(button('Focus on selected', self.focus_selected))
         actions.addWidget(button('Delete', self.delete_task))
@@ -477,7 +546,7 @@ class Studio(QMainWindow):
         self.badges = label('')
         self.badges.setStyleSheet('background:#e8efdc; padding:22px; border-radius:14px;')
         v.addWidget(self.badges)
-        row = QHBoxLayout()
+        row = self.adaptive_row()
         row.addWidget(label('Daily focus goal'))
         self.goal = QSpinBox()
         self.goal.setRange(5, 600)
@@ -492,12 +561,12 @@ class Studio(QMainWindow):
         self.goal_bar.setRange(0, 100)
         self.goal_bar.setTextVisible(False)
         v.addWidget(self.goal_bar)
-        v.addWidget(label('Closing Studio asks whether to save partial focus time. Breaks never count as work.', 'muted'))
+        v.addWidget(label('Closing the window keeps your goose and timer running. Use Quit to end the app. Breaks never count as work.', 'muted'))
         v.addStretch()
 
     def build_controls(self):
         v = self.page('YOUR GOOSE, YOUR RULES', 'Feather controls.', 'Everything works offline except the optional, manual Gemini screen peek.')
-        row = QHBoxLayout()
+        row = self.adaptive_row()
         row.addWidget(label('Goose wardrobe'))
         self.skin = QComboBox()
         for key, skin in SKINS.items():
@@ -507,24 +576,26 @@ class Studio(QMainWindow):
         self.preview.engine.set_theme(self.skin.currentData())
         row.addWidget(self.skin, 1)
         v.addLayout(row)
-        self.quiet = QCheckBox('Quiet nest: mute sounds, idle chatter and guard interruptions')
+        self.quiet = QCheckBox('Quiet mode: no sound or chatter')
         self.quiet.setChecked(self.store.pref('quiet', False))
         self.quiet.toggled.connect(self.set_quiet)
         v.addWidget(self.quiet)
-        self.water = QCheckBox('Water reminder every 45 minutes while Studio is running')
+        self.water = QCheckBox('Water reminder (every 45 minutes)')
         self.water.setChecked(self.store.pref('water', False))
         self.water.toggled.connect(lambda val: self.store.set_pref('water', val))
         v.addWidget(self.water)
-        self.stretch = QCheckBox('Stretch reminder every 60 minutes while Studio is running')
+        self.stretch = QCheckBox('Stretch reminder (every 60 minutes)')
         self.stretch.setChecked(self.store.pref('stretch', False))
         self.stretch.toggled.connect(lambda val: self.store.set_pref('stretch', val))
         v.addWidget(self.stretch)
-        self.guard = QCheckBox('Enable local distraction guard (Windows only, title matching)')
+        self.guard = QCheckBox('Local distraction guard (Windows only)')
         self.guard.setChecked(self.store.pref('guard', False) and sys.platform == 'win32')
         self.guard.setEnabled(sys.platform == 'win32')
         self.guard.toggled.connect(self.set_guard)
         v.addWidget(self.guard)
         v.addWidget(label('The guard nudges you; it does not block apps. It checks titles in memory and never saves them.', 'muted'))
+        v.addWidget(label('DESKTOP COMPANION', 'eyebrow'))
+        v.addWidget(label('Close the window to keep the goose on your desktop. Your focus timer and reminders keep running. Double-click the goose or use the tray icon to reopen Studio. Quit is the only action that stops everything.', 'muted'))
         v.addWidget(label('OPTIONAL SCREEN PEEK', 'eyebrow'))
         v.addWidget(label('A peek sends a thumbnail of your whole primary screen to Google Gemini. Close private windows first. Each upload requires a new confirmation. No automatic capture. API usage may cost money.', 'muted'))
         self.model = QLineEdit(os.environ.get('GEMINI_MODEL', self.store.pref('model', 'gemini-2.5-flash')))
@@ -671,9 +742,10 @@ class Studio(QMainWindow):
     def notify(self, title, text):
         self.coach_text.setText(title.upper() + '\n' + text)
         self.statusBar().showMessage(text, 15000)
-        if self.goose and not self.quiet.isChecked():
-            self.goose.say(text, duration_sec=7)
-            self.goose.tray_icon.showMessage(title, text, QSystemTrayIcon.MessageIcon.Information, 6000)
+        if not self.quiet.isChecked():
+            if self.goose and self.goose.isVisible():
+                self.goose.say(text, duration_sec=7)
+            self.tray.showMessage(title, text, QSystemTrayIcon.MessageIcon.Information, 6000)
 
     def local_coach(self):
         text = random.choice([
@@ -725,9 +797,39 @@ class Studio(QMainWindow):
             self.goose = StudioGoose(self.cfg)
             self.goose.studio = self
             self.goose.quiet = self.quiet.isChecked()
+            self.goose.tray_icon.hide()  # Studio owns one tray icon, not two.
             self.set_quiet(self.quiet.isChecked())
-        self.goose.show()
-        self.goose.raise_()
+        # The animated preview belongs inside the dashboard. The real desktop
+        # companion is hidden while the dashboard is visible, never on top of it.
+        if not self.isVisible() or self.isMinimized():
+            self.goose.show()
+            self.goose._anchor()
+        else:
+            self.goose.hide()
+            self.goose.speech_bubble.hide_bubble()
+
+    def open_dashboard(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if self.goose:
+            self.goose.hide()
+            self.goose.speech_bubble.hide_bubble()
+
+    def send_to_desktop(self):
+        self.hide()
+        if not self.demo:
+            self.show_goose()
+        self.statusBar().showMessage('Running on desktop. Double-click your goose to reopen.', 6000)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if hasattr(self, 'goose') and self.goose:
+            if self.isMinimized():
+                self.goose.show()
+            elif self.isVisible():
+                self.goose.hide()
+                self.goose.speech_bubble.hide_bubble()
 
     def change_skin(self):
         key = self.skin.currentData()
@@ -786,21 +888,31 @@ class Studio(QMainWindow):
         self.worker.start()
 
     def closeEvent(self, event):
+        # The X means background mode, never destruction or timer reset.
+        event.ignore()
+        self.send_to_desktop()
+
+    def request_quit(self):
+        if self._closed:
+            return True
         if self.worker and self.worker.isRunning():
-            QMessageBox.information(self, 'Finishing screen peek', 'Wait for the in-progress request to finish before closing. No new screenshot will be taken.')
-            event.ignore()
-            return
+            QMessageBox.information(self, 'Finishing screen peek', 'Wait for the in-progress request to finish before quitting. No new screenshot will be taken.')
+            return False
         if not self.reset_focus():
-            event.ignore()
-            return
+            return False
+        self.timer.stop()
         if self.goose:
             self.goose.monitor.stop()
             self.goose.monitor.wait(4000)
             self.goose.tray_icon.hide()
+            self.goose.speech_bubble.hide_bubble()
             self.goose.hide()
+        self.tray.hide()
         self.store.db.close()
-        event.accept()
+        self._closed = True
+        self.hide()
         QApplication.instance().quit()
+        return True
 
 
 def main():
@@ -809,9 +921,12 @@ def main():
     parser.add_argument('--demo', action='store_true', help='Open without a floating goose; never uploads anything')
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
+    app.setStyle('Fusion')  # Stable native-control metrics across Windows DPI settings.
     app.setApplicationName('Da Goose Studio')
     app.setQuitOnLastWindowClosed(False)
     window = Studio(args.data_dir, args.demo)
+    available = app.primaryScreen().availableGeometry()
+    window.resize(min(1040, available.width() - 24), min(760, available.height() - 48))
     window.show()
     if not args.demo:
         QTimer.singleShot(300, window.show_goose)
